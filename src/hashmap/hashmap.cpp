@@ -15,8 +15,8 @@ inline uint64_t fnv1a_hash_64 (const string& data) {
     return hash;
 }
 
-inline unsigned int bounded_hash_64 (const string& data, const unsigned int& bucketSize) {
-    unsigned int hash = static_cast<unsigned int>(fnv1a_hash_64(data));
+inline uint bounded_hash_64 (const string& data, const uint& bucketSize) {
+    uint hash = static_cast<uint>(fnv1a_hash_64(data));
     return hash % bucketSize;
 }
 
@@ -37,8 +37,8 @@ class HashMap {
     typedef LinkedList<TypedHashItem*> TypedLinkedList;
     
     private:
-        unsigned int load = 0;
-        unsigned int bucketSize = 1024;
+        uint load = 0;
+        uint bucketSize = 1024;
         vector<TypedLinkedList*> hashBucket;
 
         /**
@@ -48,13 +48,36 @@ class HashMap {
             return [&](TypedHashItem* item) -> bool {
                 return key == item->key;
             };
+        };
+
+        /**
+         * Get a mutable reference to the `HashItem` at a specific `idx`.
+         */
+        T& getHashItemReferenceAtIdx(uint idx, string key) {
+            TypedLinkedList*& linkedList = hashBucket[idx];
+
+            // no collision
+            if (linkedList == nullptr) {
+                linkedList = new TypedLinkedList();
+                load += 1;
+            }
+
+            auto existingItem = linkedList->getItem(checkKey(key));
+            if (existingItem == nullopt) {
+                TypedHashItem* newItem = new TypedHashItem(key);    
+                linkedList->addItem(newItem);
+                return newItem->item;
+            }
+
+            // optional<T> is a pointer to T, so need to dereference the pointer before accessing a member
+            return (*existingItem)->item;
         }
 
     public:
         HashMap(): bucketSize(1024) {
             hashBucket.resize(bucketSize, nullptr);
         };
-        HashMap(unsigned int bucketSize): bucketSize(bucketSize) {
+        HashMap(uint bucketSize): bucketSize(bucketSize) {
             hashBucket.resize(bucketSize, nullptr);
         };
         ~HashMap() {
@@ -67,29 +90,15 @@ class HashMap {
          * `operator[]` overload returning a mutable reference to the item to be modified.
          */
         T& operator[](string key) {
-            unsigned int idx = bounded_hash_64(key, bucketSize);
-            TypedLinkedList*& linkedList = hashBucket[idx];
-
-            if (linkedList == nullptr) {
-                linkedList = new TypedLinkedList();
-            }
-
-            auto existingItem = linkedList->getItem(checkKey(key));
-            if (existingItem == nullopt) {
-                TypedHashItem* newItem = new TypedHashItem(key);    
-                linkedList->addItem(newItem);
-                return newItem->item;
-            }
-
-            // optional<T> is a pointer to T, so need to dereference the pointer before accessing a member
-            return (*existingItem)->item;
+            uint idx = bounded_hash_64(key, bucketSize);
+            return getHashItemReferenceAtIdx(idx, key);
         };
 
         /**
          * `operator[]` overload returning an immutable reference to the item being accessed.
          */
         const optional<T&> operator[](string key) const {
-            unsigned int idx = bounded_hash_64(key, bucketSize);
+            uint idx = bounded_hash_64(key, bucketSize);
             if (hashBucket[idx] == nullptr) {
                 return nullopt;
             } else {
@@ -102,6 +111,31 @@ class HashMap {
                 }
             }
         };
+
+        /**
+         * Rehash existing entries to fit a new `hashBucket` size.
+         */
+        void rehash(uint size) {
+            vector<TypedLinkedList*> oldHashBucket = hashBucket;
+            vector<TypedLinkedList*> newHashBucket;
+            newHashBucket.resize(size, nullptr);
+
+            // update instance attributes
+            hashBucket = newHashBucket;
+            bucketSize = size;
+
+            for (TypedLinkedList*& list : oldHashBucket) {
+                if (list != nullptr) {
+                    vector<TypedHashItem*> listItems = list->dumpToVector();
+                    for (TypedHashItem* hashItem : listItems) {
+                        string key = hashItem->key;
+                        T item = hashItem->item;
+                        uint idx = bounded_hash_64(key, bucketSize);
+                        getHashItemReferenceAtIdx(idx, key) = item;
+                    }
+                }
+            }
+        }
 
 
 };
