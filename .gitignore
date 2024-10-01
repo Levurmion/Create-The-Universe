@@ -1,0 +1,4 @@
+**/bin/
+**/objects/
+.DS_store
+.vscode
