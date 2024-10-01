@@ -73,6 +73,11 @@ class HashMap {
             return (*existingItem)->item;
         }
 
+        float getLoadFactor() {
+            float loadFactor = static_cast<float>(load)/bucketSize;
+            return loadFactor;
+        }
+
     public:
         HashMap(): bucketSize(1024) {
             hashBucket.resize(bucketSize, nullptr);
@@ -80,6 +85,17 @@ class HashMap {
         HashMap(uint bucketSize): bucketSize(bucketSize) {
             hashBucket.resize(bucketSize, nullptr);
         };
+        HashMap(const HashMap<T>& other) {
+            load = other.load;
+            bucketSize = other.bucketSize;
+            hashBucket.resize(bucketSize, nullptr);
+            for (uint i = 0; i < bucketSize; i++) {
+                if (other.hashBucket[i] != nullptr) {
+                    hashBucket[i] = new TypedLinkedList(*other.hashBucket[i]);
+                }
+            }
+        };
+
         ~HashMap() {
             for (TypedLinkedList* linkedList : hashBucket) {
                 delete linkedList;
@@ -91,7 +107,14 @@ class HashMap {
          */
         T& operator[](string key) {
             uint idx = bounded_hash_64(key, bucketSize);
-            return getHashItemReferenceAtIdx(idx, key);
+            T& hashItemReference = getHashItemReferenceAtIdx(idx, key);
+
+            // rehash at powers of 2 if exceeds load factor threshold
+            if (getLoadFactor() > 0.75) {
+                rehash(bucketSize * 2);
+            }
+
+            return hashItemReference;
         };
 
         /**
@@ -123,6 +146,7 @@ class HashMap {
             // update instance attributes
             hashBucket = newHashBucket;
             bucketSize = size;
+            load = 0;
 
             for (TypedLinkedList*& list : oldHashBucket) {
                 if (list != nullptr) {
@@ -136,6 +160,5 @@ class HashMap {
                 }
             }
         }
-
 
 };
